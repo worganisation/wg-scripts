@@ -2,13 +2,6 @@
 name: Semantic Release
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - src/**
-      - '!src/wg_scripts/__init__.py'
-
   workflow_dispatch:
     inputs:
       force-deployment:
@@ -23,15 +16,22 @@ on:
           - minor
           - major
 
+permissions:
+  contents: write
+
 concurrency:
   group: semantic-release
   cancel-in-progress: false
 
 jobs:
   release:
+    if: >-
+      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     name: Release
-    uses: worganisation/github-config-files/.github/workflows/__semantic-release.yml@0.5.3
+    # yamllint disable-line rule:line-length
+    uses: worganisation/github-config-files/.github/workflows/__semantic-release.yml@0.10.0
     with:
       python-version: '3.14'
-      force-deployment: ${{ inputs.force-deployment != 'auto' && inputs.force-deployment || '' }}
+      force-deployment: >-
+        ${{ inputs.force-deployment != 'auto' && inputs.force-deployment || '' }}
     secrets: inherit
