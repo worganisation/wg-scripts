@@ -16,7 +16,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy
-    if: "!github.event.release.prerelease"
+    if: '!github.event.release.prerelease'
     environment: production-deploy
     runs-on: [self-hosted, linux, x64, cc, iac, opentofu]
     timeout-minutes: 15
