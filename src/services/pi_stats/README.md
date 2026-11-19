@@ -78,6 +78,7 @@ Every minute the payload also includes low-overhead host health fields:
 | `cpu_iowait` | % | non-blocking `psutil.cpu_times_percent().iowait` |
 | `network_interface` | — | primary NIC (matches `local_ip`, else first up physical) |
 | `network_link_up` | bool | `psutil.net_if_stats()` for that NIC |
+| `wifi_signal_dbm` | dBm | Access point signal from `iw dev <interface> link` for the primary NIC |
 | `network_receive_bytes_per_second` | B/s | delta of `net_io_counters` between samples |
 | `network_transmit_bytes_per_second` | B/s | delta of `net_io_counters` between samples |
 | `pending_updates` | count | cached `apt list --upgradable` (no `apt update`) |
@@ -86,6 +87,8 @@ Every minute the payload also includes low-overhead host health fields:
 Network byte rates are omitted from the first sample (no previous counter). Virtual
 interfaces (`lo`, `docker*`, `br-*`, `veth*`, `tailscale*`, …) are skipped when
 selecting the primary NIC.
+
+Wi-Fi signal is published when `iw` can read an associated Wi-Fi link on the primary interface. Home Assistant shows `sensor.<hostname>_wifi_signal` as unknown on Ethernet, on Wi-Fi disconnect, or when `iw` is unavailable. On Raspberry Pi OS, install the `iw` package if needed.
 
 `pending_updates` is refreshed at startup and then only every
 `APT_CHECK_INTERVAL_SECONDS` (default six hours). That avoids a material CPU cost

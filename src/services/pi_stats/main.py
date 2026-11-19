@@ -11,7 +11,7 @@ from functools import lru_cache
 from json import JSONDecodeError, dumps, loads
 from os import getenv, getloadavg
 from pathlib import Path
-from subprocess import run  # ruff: ignore[suspicious-subprocess-import]
+from subprocess import TimeoutExpired, run  # ruff: ignore[suspicious-subprocess-import]
 from threading import Event
 from time import monotonic, sleep, time
 from typing import TYPE_CHECKING, ClassVar, Final, NotRequired, TypedDict
@@ -59,10 +59,14 @@ HWMON_ROOT: Final = Path("/sys/class/hwmon")
 PWM_MAX_DUTY: Final = 255
 SMARTCTL: Final = "/usr/sbin/smartctl"
 APT_BIN: Final = "/usr/bin/apt"
+IW_BIN: Final = "/usr/sbin/iw"
 REBOOT_REQUIRED_PATH: Final = Path("/var/run/reboot-required")
 THROTTLED_ACTIVE_MASK: Final = 0xF
 THROTTLED_OCCURRED_MASK: Final = 0xF0000
 THROTTLED_OUTPUT: Final = re.compile(r"throttled=(0x[0-9a-fA-F]+)")
+WIFI_SIGNAL_OUTPUT: Final = re.compile(
+    r"^[ \t]*signal:[ \t]+(-?[0-9]+)[ \t]+dBm$", re.MULTILINE
+)
 VIRTUAL_INTERFACE_PREFIXES: Final = (
     "lo",
     "docker",
@@ -173,6 +177,7 @@ class Stats(TypedDict):
     cpu_iowait: float
     network_interface: NotRequired[str]
     network_link_up: NotRequired[bool]
+    wifi_signal_dbm: NotRequired[int]
     network_receive_bytes_per_second: NotRequired[float]
     network_transmit_bytes_per_second: NotRequired[float]
     pending_updates: NotRequired[int]
@@ -752,6 +757,28 @@ def select_primary_interface(ip_address: str) -> str | None:
     return None
 
 
+def read_wifi_signal_dbm(interface: str) -> int | None:
+    """Read the connected access point's signal strength when available."""
+    try:
+        completed = run(  # ruff: ignore[subprocess-without-shell-equals-true]
+            [IW_BIN, "dev", interface, "link"],
+            capture_output=True,
+            check=False,
+            text=True,
+            errors="replace",
+            timeout=3,
+        )
+    except OSError, TimeoutExpired:
+        return None
+
+    if completed.returncode == 0 and (
+        signal := WIFI_SIGNAL_OUTPUT.search(completed.stdout)
+    ):
+        return int(signal[1])
+
+    return None
+
+
 def count_pending_updates() -> int | None:
     """Count packages reported by ``apt list --upgradable`` (no index refresh)."""
     try:
@@ -884,7 +911,11 @@ class RaspberryPi:
         """Attach primary-interface network fields onto a stats payload."""
         network = self._network_stats(stats["local_ip"])
         if "network_interface" in network:
-            stats["network_interface"] = network["network_interface"]
+            interface = network["network_interface"]
+            stats["network_interface"] = interface
+            if (signal := read_wifi_signal_dbm(interface)) is not None:
+                stats["wifi_signal_dbm"] = signal
+
         if "network_link_up" in network:
             stats["network_link_up"] = network["network_link_up"]
         if "network_receive_bytes_per_second" in network:
