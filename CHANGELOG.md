@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v2.5.0 (2026-11-19)
+
+### Bug Fixes
+
+- **ci**: Align manual releases and LAN deployments
+  ([#422](https://github.com/worganisation/wg-scripts/pull/422),
+  [`b71a7e7`](https://github.com/worganisation/wg-scripts/commit/b71a7e7cc28dd02ed12d57bb6bf0088893e96a0b))
+
+### Chores
+
+- **deps**: Configure Renovate updates
+  ([#418](https://github.com/worganisation/wg-scripts/pull/418),
+  [`56e8c71`](https://github.com/worganisation/wg-scripts/commit/56e8c71170e884bf8d47d58fa9170e3c79496640))
+
+### Features
+
+- Expose Pi Wi-Fi signal strength in Home Assistant
+  ([#427](https://github.com/worganisation/wg-scripts/pull/427),
+  [`13a1456`](https://github.com/worganisation/wg-scripts/commit/13a14567ad2130dd9d641c6f80b3a9430a3bb3b6))
+
+
 ## v2.4.2 (2026-08-11)
 
 ### Bug Fixes
