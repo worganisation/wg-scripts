@@ -317,6 +317,18 @@ def _fixed_components(hostname: str) -> dict[str, dict[str, Any]]:
         ),
         _sensor_component(
             hostname=hostname,
+            metric="wifi_signal",
+            name="Wi-Fi Signal Strength",
+            value_template="{{ value_json.wifi_signal_dbm | default(none) }}",
+            icon="mdi:wifi",
+            force_update=False,
+            unit_of_measurement="dBm",
+            state_class="measurement",
+            device_class="signal_strength",
+            entity_category="diagnostic",
+        ),
+        _sensor_component(
+            hostname=hostname,
             metric="network_receive",
             name="Network Receive",
             value_template="{{ value_json.network_receive_bytes_per_second }}",

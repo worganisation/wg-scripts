@@ -36,38 +36,27 @@ releases are cut by python-semantic-release on `main`.
 
 ## Auto-deploy on release
 
-After a successful semantic-release tag (or a manual workflow run with
-`publish-tag`), GitHub Actions joins Tailscale as an ephemeral `tag:ci` node
-and SSHs to each Pi’s MagicDNS name to run `just deploy <tag>`.
+Manually dispatch Semantic Release on `main` to publish a version. Stable published releases trigger the CC self-hosted Linux runner to deploy that tag over direct LAN SSH. The workflow declares `pi@10.0.0.51` (mtrxpi), `worgarside@10.0.0.241` (vaultpi), and `worgarside@10.0.0.52` (vsmppi). OpenWrt owns these DHCP reservations, and infrastructure owns the runner's TCP 22 allowlist.
 
-Unreachable hosts are warned and skipped (partial failure does not fail the
-job). If every host fails, the job fails so systemic issues (bad key, Tailscale,
-missing tag) surface. Redeploy an existing tag via **Actions → Semantic
-Release → Run workflow** with `publish-tag` set (for example `2.0.0`) — that
-skips cutting a new release.
+The runner invokes `just deploy <tag>` in `/home/<user>/wg-scripts`. Unreachable hosts are warned and skipped; the job fails if no host succeeds. Re-run the original release deployment to retry the same tag, including after powering on an offline Pi. Publish a reviewed revert release for a source rollback. Deployments serialize across releases so two tags cannot update the Pis concurrently.
 
 ### One-time Pi setup
 
-On each Pi (LAN SSH is fine for bootstrap). Create a reusable auth key in the
-[Tailscale admin console](https://login.tailscale.com/admin/settings/keys), then:
+Use a verified administrative SSH connection to install the deployment public key:
 
-```bash
-just setup-tailscale tskey-auth-XXXX
+```fish
 just setup-deploy-key ./wg-scripts-deploy.pub
 ```
 
-`setup-deploy-key` accepts a `.pub` file path or the key line itself (same key on
-every Pi; CI uses one `DEPLOY_SSH_PRIVATE_KEY`). Keep the repo at
-`/home/<user>/wg-scripts` with `just` / `uv` / `git`, and allow `tag:ci` to SSH
-these nodes in the Tailscale ACL (same client as backplane CI).
+`setup-deploy-key` accepts a public key file or key line. Each Pi must have the matching key and the repository at `/home/<user>/wg-scripts`, with `just`, `uv` and `git` available. GCF's `actions/lan-ssh` creates temporary credentials and a strict SSH configuration, then automatically removes them after the job.
 
-### `production-deploy` environment
+### Actions settings
+
+Use the `production-deploy` environment, or repository settings for private repositories on GitHub Free.
 
 | Kind | Name | Notes |
-|------|------|--------|
-| Var | `TS_OAUTH_CLIENT_ID` | Tailscale OAuth client ID (`tag:ci`) |
-| Secret | `TS_OAUTH_SECRET` | Matching OAuth client secret |
-| Secret | `DEPLOY_SSH_PRIVATE_KEY` | Private key matching the shared deploy key on each Pi |
-| Var | `DEPLOY_SSH_USER` | Default SSH user when a host has no `user@` prefix |
-| Var | `WG_SCRIPTS_HOSTS` | Comma-separated hosts, optional `user@host` (e.g. `pi@host-a,deploy@host-b`) |
-| Var | `WG_SCRIPTS_TS_TAG` | Optional. If set (e.g. `tag:pi`), discover online Tailscale peers with this tag instead of `WG_SCRIPTS_HOSTS` |
+| --- | --- | --- |
+| Secret | `DEPLOY_SSH_PRIVATE_KEY` | Private half of the deployment public key installed on each Pi |
+| Var | `DEPLOY_SSH_KNOWN_HOSTS` | Independently verified OpenSSH host-key entries for all three LAN addresses |
+
+Verify host keys through an existing trusted administrative connection before enrolling them. Keep vsmppi's verified key configured while it is powered off; deployment never discovers or automatically trusts new keys.

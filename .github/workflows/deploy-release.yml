@@ -2,53 +2,38 @@
 name: Deploy Release
 
 on:
-  push:
-    tags:
-      - '[0-9]+.[0-9]+.[0-9]+*'
+  release:
+    types:
+      - published
 
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: The release tag to deploy
-        required: true
-        type: string
+permissions:
+  contents: read
 
 concurrency:
-  group: deploy-${{ inputs.tag || github.ref_name }}
+  group: wg-scripts-deploy
   cancel-in-progress: false
 
 jobs:
   deploy:
     name: Deploy
+    if: '!github.event.release.prerelease'
     environment: production-deploy
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, cc, iac, opentofu]
     timeout-minutes: 15
     steps:
-      - name: Connect to Tailscale
+      - name: Set up LAN SSH
+        id: ssh
         # yamllint disable-line rule:line-length
-        uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+        uses: worganisation/github-config-files/actions/lan-ssh@ff2bdafb7120c951c6dfa6d968e1e4a69b9092ec
         with:
-          oauth-client-id: ${{ vars.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
-
-      - name: Set up SSH key
-        env:
-          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
+          private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          known-hosts: ${{ vars.DEPLOY_SSH_KNOWN_HOSTS }}
 
       - name: Deploy to Pis
         env:
-          TAG: ${{ inputs.tag || github.ref_name }}
-          # Default SSH user when a host entry has no user@ prefix.
-          DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
-          WG_SCRIPTS_HOSTS: ${{ vars.WG_SCRIPTS_HOSTS }}
-          # Optional: e.g. tag:pi — when set, discover online peers with this
-          # tag instead of using WG_SCRIPTS_HOSTS.
-          WG_SCRIPTS_TS_TAG: ${{ vars.WG_SCRIPTS_TS_TAG }}
+          TAG: ${{ github.event.release.tag_name }}
+          SSH_CONFIG: ${{ steps.ssh.outputs.config }}
+          WG_SCRIPTS_HOSTS: pi@10.0.0.51,worgarside@10.0.0.241,worgarside@10.0.0.52
         run: |
           set -uo pipefail
 
@@ -57,24 +42,7 @@ jobs:
             exit 1
           fi
 
-          if [[ -n "${WG_SCRIPTS_TS_TAG:-}" ]]; then
-            echo "Discovering hosts with Tailscale tag ${WG_SCRIPTS_TS_TAG}"
-            mapfile -t HOSTS < <(
-              tailscale status --json | jq -r --arg tag "$WG_SCRIPTS_TS_TAG" '
-                .Peer[]
-                | select(.Online == true)
-                | select((.Tags // []) | index($tag) != null)
-                | .HostName
-              ' | sort -u
-            )
-          else
-            IFS=',' read -ra HOSTS <<< "${WG_SCRIPTS_HOSTS}"
-          fi
-
-          if [[ ${#HOSTS[@]} -eq 0 ]]; then
-            echo "::error::No deploy hosts found (set WG_SCRIPTS_TS_TAG or WG_SCRIPTS_HOSTS)"
-            exit 1
-          fi
+          IFS=',' read -ra HOSTS <<< "${WG_SCRIPTS_HOSTS}"
 
           ok=0
           failed=0
@@ -95,11 +63,11 @@ jobs:
               user="${entry%%@*}"
               host="${entry#*@}"
             else
-              user="${DEPLOY_SSH_USER}"
+              user=""
               host="$entry"
             fi
 
-            if [[ -z "$user" || -z "$host" ]]; then
+            if [[ ! "$user" =~ ^[a-z_][a-z0-9_-]*$ || ! "$host" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]; then
               echo "::warning::Invalid host entry: ${entry}"
               failed=$((failed + 1))
               continue
@@ -108,27 +76,14 @@ jobs:
             install_dir="/home/${user}/wg-scripts"
 
             echo "::group::Deploy ${TAG} → ${user}@${host}"
-            # GHA runners often cannot resolve MagicDNS short names via system
-            # DNS; ask Tailscale's netmap for the 100.x address instead.
-            if ! ip="$(tailscale ip -4 "$host")"; then
-              echo "::warning::Could not resolve ${host} via Tailscale"
-              echo "| \`${host}\` | \`${user}\` | unresolved |" >> "$GITHUB_STEP_SUMMARY"
-              failed=$((failed + 1))
-              echo "::endgroup::"
-              continue
-            fi
-
-            if ssh -i ~/.ssh/deploy_key \
-              -o ConnectTimeout=10 \
-              -o StrictHostKeyChecking=accept-new \
-              -o UserKnownHostsFile=~/.ssh/known_hosts \
-              "${user}@${ip}" \
+            if ssh -F "$SSH_CONFIG" \
+              "${user}@${host}" \
               "bash -lc 'cd ${install_dir} && just deploy ${TAG}'"; then
-              echo "OK: ${user}@${host} (${ip})"
+              echo "OK: ${user}@${host}"
               echo "| \`${host}\` | \`${user}\` | OK |" >> "$GITHUB_STEP_SUMMARY"
               ok=$((ok + 1))
             else
-              echo "::warning::Failed to deploy ${TAG} to ${user}@${host} (${ip})"
+              echo "::warning::Failed to deploy ${TAG} to ${user}@${host}"
               echo "| \`${host}\` | \`${user}\` | failed |" >> "$GITHUB_STEP_SUMMARY"
               failed=$((failed + 1))
             fi
@@ -143,8 +98,8 @@ jobs:
 
           # Soft-fail only partial failures: one unreachable Pi must not fail
           # the release deploy. But if every host failed, that is systemic
-          # (bad key, Tailscale, missing tag) and must surface.
-          if [[ "$ok" -eq 0 && "$failed" -gt 0 ]]; then
+          # (bad key, LAN routing, missing tag) and must surface.
+          if [[ "$ok" -eq 0 ]]; then
             echo "::error::All ${failed} host(s) failed to deploy ${TAG}"
             exit 1
           fi
