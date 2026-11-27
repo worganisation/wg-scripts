@@ -6,6 +6,7 @@
 *.pyc
 *.csv
 *.json
+!deployment/pi-telegraf/vaultpi-mounts.json
 *.xlsx
 *.xlsm
 *.docx

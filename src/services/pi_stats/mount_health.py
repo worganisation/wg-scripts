@@ -8,7 +8,7 @@ import posixpath
 import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, NotRequired, TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -20,7 +20,7 @@ MOUNTINFO_MIN_LEFT_FIELDS = 6
 MOUNTINFO_MIN_RIGHT_FIELDS = 3
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class MountCheck:
     """One configured filesystem mount whose health should be reported."""
 
@@ -30,7 +30,7 @@ class MountCheck:
     required_directories: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class MountInfo:
     """Relevant fields from one Linux mountinfo record."""
 
@@ -40,13 +40,18 @@ class MountInfo:
     super_options: frozenset[str]
 
 
-class MountHealth(TypedDict):
+class _ObservedSource(TypedDict, total=False):
+    """Source available when a mount entry exists."""
+
+    actual_source: str
+
+
+class MountHealth(_ObservedSource):
     """Structured health state published for one configured mount."""
 
     healthy: bool
     path: str
     expected_source: str
-    actual_source: NotRequired[str]
     mounted: bool
     source_matches: bool
     read_write: bool

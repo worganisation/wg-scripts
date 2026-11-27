@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Count pending updates from the local apt package lists.
+set -euo pipefail
+export LC_ALL=C
+/usr/bin/apt list --upgradable 2>/dev/null | awk '/\[upgradable from:/ { n++ } END { printf "pi_packages pending_updates=%di\n", n }'
