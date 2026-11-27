@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Install or refresh the enrolled Pi's Telegraf files. Service activation is owner-operated.
+set -euo pipefail
+
+source_dir=$(cd "$(dirname "$0")" && pwd -P)
+config=/etc/wg-pi-telegraf
+helpers=/usr/local/lib/wg-pi-telegraf
+
+if [[ $EUID != 0 ]]; then
+    echo "Run the installer as root." >&2
+    exit 1
+fi
+if [[ ! -x /usr/bin/telegraf ]] || ! id telegraf >/dev/null 2>&1; then
+    echo "Install the Telegraf package for this Pi first." >&2
+    exit 1
+fi
+if [[ ! -s "$config/writer.env" || -L "$config/writer.env" ]] ||
+   [[ ! $(stat -c '%u:%a' "$config/writer.env") =~ ^0:(400|600)$ ]]; then
+    echo "Enroll a root-owned writer.env readable only by root." >&2
+    exit 1
+fi
+
+if [[ $# == 0 ]]; then
+    if [[ ! -s "$config/identity.env" ]]; then
+        echo "First enrollment requires install iot|main [canonical-host]." >&2
+        exit 1
+    fi
+else
+    if [[ $# -gt 2 ]]; then
+        echo "Usage: install iot|main [canonical-host]" >&2
+        exit 1
+    fi
+    case "$1" in
+        iot) address=10.0.0.111 ;;
+        main) address=192.168.68.231 ;;
+        *) echo "Choose the private CT111 interface: iot or main." >&2; exit 1 ;;
+    esac
+    host=${2:-$(hostname -s)}
+    host=${host,,}
+    if [[ ! $host =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]]; then
+        echo "Choose a DNS short hostname for the Pi's stable host tag." >&2
+        exit 1
+    fi
+    install -d -m 0755 "$config"
+    printf 'PI_HOST=%s\nPI_INFLUX_URL=http://%s:8086\n' "$host" "$address" > "$config/identity.env"
+    chmod 0644 "$config/identity.env"
+fi
+
+install -d -m 0755 "$config/inputs.d" "$helpers"
+install -m 0644 "$source_dir/telegraf.conf" "$config/"
+install -m 0644 "$source_dir/hardware.py" "$source_dir/mounts.py" "$helpers/"
+install -m 0644 "$source_dir/../../src/services/pi_stats/mount_health.py" "$helpers/"
+install -m 0755 "$source_dir/apt-updates" "$helpers/"
+if [[ -r /proc/net/wireless ]]; then
+    install -m 0644 "$source_dir/wireless.conf" "$config/inputs.d/"
+else
+    rm -f "$config/inputs.d/wireless.conf"
+fi
+if grep -qx 'PI_HOST=vaultpi' "$config/identity.env" && [[ ! -e "$config/mounts.json" ]]; then
+    install -m 0644 "$source_dir/vaultpi-mounts.json" "$config/mounts.json"
+fi
+if grep -qx 'PI_HOST=vaultpi' "$config/identity.env" && [[ -x /usr/sbin/smartctl ]]; then
+    visudo -cf "$source_dir/vaultpi-smart.sudoers" >/dev/null
+    install -m 0440 "$source_dir/vaultpi-smart.sudoers" /etc/sudoers.d/wg-pi-telegraf-smart
+    install -m 0644 "$source_dir/vaultpi-smart.conf" "$config/inputs.d/"
+fi
+if [[ -f "$config/mounts.json" ]]; then
+    install -m 0644 "$source_dir/mounts.conf" "$config/inputs.d/"
+else
+    rm -f "$config/inputs.d/mounts.conf"
+fi
+
+install -m 0644 "$source_dir/wg-pi-telegraf.service" /etc/systemd/system/
+systemctl daemon-reload

@@ -1,0 +1,16 @@
+[Unit]
+Description=Raspberry Pi metrics for InfluxDB
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=telegraf
+Group=telegraf
+EnvironmentFile=/etc/wg-pi-telegraf/identity.env
+EnvironmentFile=/etc/wg-pi-telegraf/writer.env
+ExecStart=/usr/bin/telegraf --config /etc/wg-pi-telegraf/telegraf.conf --config-directory /etc/wg-pi-telegraf/inputs.d
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

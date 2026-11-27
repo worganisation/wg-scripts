@@ -1,0 +1,17 @@
+[
+  {
+    "id": "vault_hdd",
+    "path": "/mnt/vault-hdd",
+    "source": "/dev/mapper/vault-hdd",
+    "required_directories": [
+      "pbs",
+      "immich"
+    ]
+  },
+  {
+    "id": "vault_ssd",
+    "path": "/mnt/vault-ssd",
+    "source": "/dev/mapper/vault-ssd",
+    "required_directories": []
+  }
+]

@@ -171,6 +171,11 @@ restart-all:
     #!/usr/bin/env bash
     set -euo pipefail
     for service in $(just _services); do
+        if [[ "$service" == pi_stats && -f /etc/systemd/system/wg-pi-telegraf.service ]] &&
+           ! systemctl is-enabled --quiet pi_stats.service && ! systemctl is-active --quiet pi_stats.service; then
+            echo "Skipping retired pi_stats.service"
+            continue
+        fi
         if [[ -f "/etc/systemd/system/${service}.service" ]]; then
             echo "Restarting ${service}.service"
             just restart "${service}"
@@ -178,6 +183,16 @@ restart-all:
             echo "${service}.service is not installed"
         fi
     done
+
+# Refresh an explicitly enrolled Telegraf instance during a release.
+[private]
+_refresh-pi-telegraf:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -f /etc/systemd/system/wg-pi-telegraf.service ]]; then
+        sudo deployment/pi-telegraf/install
+        sudo systemctl try-restart wg-pi-telegraf.service
+    fi
 
 # Pull latest main, sync runtime deps, and restart installed services.
 # After `just deploy <ref>` (detached HEAD), this switches back to main first.
@@ -193,6 +208,7 @@ update:
     git switch main
     git pull --ff-only origin main
     just sync
+    just _refresh-pi-telegraf
     just restart-all
 
 # Install Tailscale (if needed) and join the tailnet using this host's short
@@ -290,4 +306,5 @@ deploy ref:
     echo "Deploying ${target} ($(git rev-parse --short "${target}"))"
     git switch --detach "${target}"
     just sync
+    just _refresh-pi-telegraf
     just restart-all

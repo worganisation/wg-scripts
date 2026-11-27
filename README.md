@@ -60,3 +60,7 @@ Use the `production-deploy` environment, or repository settings for private repo
 | Var | `DEPLOY_SSH_KNOWN_HOSTS` | Independently verified OpenSSH host-key entries for all three LAN addresses |
 
 Verify host keys through an existing trusted administrative connection before enrolling them. Keep vsmppi's verified key configured while it is powered off; deployment never discovers or automatically trusts new keys.
+
+## Raspberry Pi telemetry
+
+[Pi Telegraf enrollment](deployment/pi-telegraf/README.md) installs a direct writer to CT111. Each Pi can be enrolled and checked alongside its MQTT publisher before its Home Assistant consumers are switched.

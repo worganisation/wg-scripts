@@ -1,0 +1,5 @@
+# Only the read-only smartctl invocations used by the VaultPi Telegraf input.
+Cmnd_Alias WG_PI_SMART = /usr/sbin/smartctl --info --health --attributes --tolerance=verypermissive -n standby --format=brief /dev/sda -d sat, \
+                        /usr/sbin/smartctl --info --health --attributes --tolerance=verypermissive -n standby --format=brief /dev/sdb -d sat, \
+                        /usr/sbin/smartctl --info --health --attributes --tolerance=verypermissive -n standby --format=brief /dev/nvme0
+telegraf ALL=(root) NOPASSWD: WG_PI_SMART
