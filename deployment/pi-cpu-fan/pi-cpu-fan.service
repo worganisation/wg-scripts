@@ -1,0 +1,13 @@
+[Unit]
+Description=Local CPU fan controller
+
+[Service]
+User=pi
+SupplementaryGroups=gpio
+ExecStart=/usr/bin/python3 /usr/local/lib/pi-cpu-fan/pi_cpu_fan.py
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
