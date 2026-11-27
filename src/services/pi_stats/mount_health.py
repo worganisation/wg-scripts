@@ -6,6 +6,7 @@ import json
 import os
 import posixpath
 import re
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, TypedDict
@@ -266,8 +267,17 @@ def collect_mount_health(
     try:
         mounts = parse_mountinfo(mountinfo_path.read_text(encoding="utf-8"))
     except OSError:
-        health_by_id = {check.identifier: inspect_mount(check, {}) for check in checks}
-        for health in health_by_id.values():
-            health["reasons"] = ["inspection_error"]
-        return health_by_id
-    return {check.identifier: inspect_mount(check, mounts) for check in checks}
+        mounts = None
+
+    health_by_id: dict[str, MountHealth] = {}
+    for check in checks:
+        if mounts is not None:
+            with suppress(OSError):
+                health_by_id[check.identifier] = inspect_mount(check, mounts)
+                continue
+
+        health = inspect_mount(check, {}, is_directory=lambda _: False)
+        health["reasons"] = ["inspection_error"]
+        health_by_id[check.identifier] = health
+
+    return health_by_id

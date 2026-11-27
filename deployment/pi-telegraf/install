@@ -51,6 +51,11 @@ install -m 0644 "$source_dir/telegraf.conf" "$config/"
 install -m 0644 "$source_dir/hardware.py" "$source_dir/mounts.py" "$helpers/"
 install -m 0644 "$source_dir/../../src/services/pi_stats/mount_health.py" "$helpers/"
 install -m 0755 "$source_dir/apt-updates" "$helpers/"
+if [[ -r /proc/net/wireless ]]; then
+    install -m 0644 "$source_dir/wireless.conf" "$config/inputs.d/"
+else
+    rm -f "$config/inputs.d/wireless.conf"
+fi
 if grep -qx 'PI_HOST=vaultpi' "$config/identity.env" && [[ ! -e "$config/mounts.json" ]]; then
     install -m 0644 "$source_dir/vaultpi-mounts.json" "$config/mounts.json"
 fi
